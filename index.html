@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Personal Budget & Expense Tracker</title>
+  <link rel="stylesheet" href="src/styles.css" />
+  <!-- Production-ready React 18 CDN for zero-setup browser execution -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+
+  <!-- Standalone browser runner that loads the React components directly -->
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    const CATEGORIES = [
+      { name: 'Housing', color: '#3b82f6' },
+      { name: 'Food', color: '#10b981' },
+      { name: 'Transport', color: '#f59e0b' },
+      { name: 'Utilities', color: '#8b5cf6' },
+      { name: 'Entertainment', color: '#ec4899' },
+      { name: 'Health', color: '#06b6d4' }
+    ];
+
+    const STORAGE_KEY = 'personal_budget_expenses_v1';
+
+    const INITIAL_EXPENSES = [
+      { id: 'exp_1', title: 'Apartment Rent (Espoo)', amount: 680.00, category: 'Housing', date: '2026-10-01' },
+      { id: 'exp_2', title: 'HSL Monthly Transit Pass', amount: 65.30, category: 'Transport', date: '2026-10-03' },
+      { id: 'exp_3', title: 'K-Citymarket Groceries', amount: 84.20, category: 'Food', date: '2026-10-08' },
+      { id: 'exp_4', title: 'Elisa Home Broadband', amount: 29.90, category: 'Utilities', date: '2026-10-10' }
+    ];
+
+    function SummaryCards({ monthlyBudget, totalSpent }) {
+      const remaining = monthlyBudget - totalSpent;
+      const isOverBudget = remaining < 0;
+
+      return (
+        <section className="summary-grid" aria-label="Financial Summary">
+          <div className="card">
+            <div className="card-title">Monthly Budget</div>
+            <div className="card-value blue">€{monthlyBudget.toFixed(2)}</div>
+          </div>
+          <div className="card">
+            <div className="card-title">Total Spent</div>
+            <div className="card-value">€{totalSpent.toFixed(2)}</div>
+          </div>
+          <div className="card">
+            <div className="card-title">Remaining Balance</div>
+            <div className={`card-value ${isOverBudget ? 'rose' : 'green'}`}>
+              €{remaining.toFixed(2)}
+            </div>
+          </div>
+        </section>
+      );
+    }
+
+    function ExpenseForm({ onAddExpense }) {
+      const [title, setTitle] = useState('');
+      const [amount, setAmount] = useState('');
+      const [category, setCategory] = useState(CATEGORIES[0].name);
+      const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]);
+
+      const handleSubmit = (e) => {
+        e.preventDefault();
+        const parsedAmount = parseFloat(amount);
+        if (!title.trim() || isNaN(parsedAmount) || parsedAmount <= 0) {
+          alert('Please enter a valid title and positive amount.');
+          return;
+        }
+
+        onAddExpense({
+          id: 'exp_' + Date.now(),
+          title: title.trim(),
+          amount: parsedAmount,
+          category,
+          date
+        });
+
+        setTitle('');
+        setAmount('');
+      };
+
+      return (
+        <div className="card">
+          <div className="card-title" style={{ marginBottom: '14px' }}>Add New Expense</div>
+          <form onSubmit={handleSubmit}>
+            <div className="form-group">
+              <label htmlFor="title">Expense Title</label>
+              <input
+                id="title"
+                className="form-input"
+                type="text"
+                placeholder="e.g. S-Market Groceries"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                required
+              />
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="amount">Amount (€)</label>
+              <input
+                id="amount"
+                className="form-input"
+                type="number"
+                step="0.01"
+                min="0.01"
+                placeholder="0.00"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                required
+              />
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="category">Category</label>
+              <select
+                id="category"
+                className="form-select"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+              >
+                {CATEGORIES.map((c) => (
+                  <option key={c.name} value={c.name}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="date">Date</label>
+              <input
+                id="date"
+                className="form-input"
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                required
+              />
+            </div>
+
+            <button type="submit" className="btn-primary">Record Expense</button>
+          </form>
+        </div>
+      );
+    }
+
+    function CategoryBreakdown({ expenses }) {
+      const total = expenses.reduce((sum, item) => sum + item.amount, 0);
+
+      const categoryTotals = CATEGORIES.map((cat) => {
+        const spent = expenses
+          .filter((e) => e.category === cat.name)
+          .reduce((sum, item) => sum + item.amount, 0);
+        const percentage = total > 0 ? (spent / total) * 100 : 0;
+        return { ...cat, spent, percentage };
+      }).filter((c) => c.spent > 0);
+
+      return (
+        <div className="card" style={{ marginTop: '20px' }}>
+          <div className="card-title" style={{ marginBottom: '14px' }}>Spending by Category</div>
+          {categoryTotals.length === 0 ? (
+            <p className="empty-state" style={{ padding: '16px 0' }}>No categorized spending yet.</p>
+          ) : (
+            categoryTotals.map((cat) => (
+              <div key={cat.name} className="progress-item">
+                <div className="progress-header">
+                  <span>{cat.name}</span>
+                  <span style={{ color: '#cbd5e1' }}>€{cat.spent.toFixed(2)} ({cat.percentage.toFixed(0)}%)</span>
+                </div>
+                <div className="progress-track">
+                  <div
+                    className="progress-fill"
+                    style={{
+                      width: `${cat.percentage}%`,
+                      backgroundColor: cat.color
+                    }}
+                  />
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      );
+    }
+
+    function ExpenseList({ expenses, onDeleteExpense }) {
+      const [searchTerm, setSearchTerm] = useState('');
+      const [selectedCategory, setSelectedCategory] = useState('ALL');
+
+      const filteredExpenses = expenses.filter((item) => {
+        const matchesSearch = item.title.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesCategory = selectedCategory === 'ALL' || item.category === selectedCategory;
+        return matchesSearch && matchesCategory;
+      });
+
+      const getCategoryColor = (catName) => {
+        const found = CATEGORIES.find((c) => c.name === catName);
+        return found ? found.color : '#94a3b8';
+      };
+
+      return (
+        <div className="card">
+          <div className="card-title" style={{ marginBottom: '16px' }}>Expense History</div>
+
+          <div className="controls-bar">
+            <input
+              type="text"
+              className="form-input"
+              placeholder="Search by title..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+            <select
+              className="form-select"
+              style={{ width: 'auto', minWidth: '150px' }}
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+            >
+              <option value="ALL">All Categories</option>
+              {CATEGORIES.map((c) => (
+                <option key={c.name} value={c.name}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {filteredExpenses.length === 0 ? (
+            <div className="empty-state">
+              {expenses.length === 0
+                ? 'No expenses recorded. Use the form to add your first expense!'
+                : 'No expenses matching your search filter.'}
+            </div>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table className="expense-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Title</th>
+                    <th>Category</th>
+                    <th style={{ textAlign: 'right' }}>Amount</th>
+                    <th style={{ textAlign: 'center' }}>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredExpenses.map((exp) => (
+                    <tr key={exp.id}>
+                      <td style={{ color: '#94a3b8', whiteSpace: 'nowrap' }}>{exp.date}</td>
+                      <td style={{ fontWeight: 600 }}>{exp.title}</td>
+                      <td>
+                        <span
+                          className="badge"
+                          style={{
+                            backgroundColor: `${getCategoryColor(exp.category)}22`,
+                            color: getCategoryColor(exp.category)
+                          }}
+                        >
+                          {exp.category}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: 'right', fontWeight: 700 }}>
+                        €{exp.amount.toFixed(2)}
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        <button
+                          className="btn-delete"
+                          onClick={() => onDeleteExpense(exp.id)}
+                          title="Delete expense"
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    function App() {
+      const [monthlyBudget, setMonthlyBudget] = useState(1200.00);
+      const [expenses, setExpenses] = useState(() => {
+        try {
+          const saved = localStorage.getItem(STORAGE_KEY);
+          return saved ? JSON.parse(saved) : INITIAL_EXPENSES;
+        } catch {
+          return INITIAL_EXPENSES;
+        }
+      });
+
+      useEffect(() => {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(expenses));
+        } catch (err) {
+          console.warn('Could not persist to localStorage:', err);
+        }
+      }, [expenses]);
+
+      const handleAddExpense = (newExpense) => {
+        setExpenses((prev) => [newExpense, ...prev]);
+      };
+
+      const handleDeleteExpense = (id) => {
+        setExpenses((prev) => prev.filter((e) => e.id !== id));
+      };
+
+      const totalSpent = expenses.reduce((sum, item) => sum + item.amount, 0);
+
+      return (
+        <div className="container">
+          <header>
+            <h1>Personal Budget & Expense Tracker</h1>
+            <p>Monitor your monthly spending, track categories, and stay on budget.</p>
+          </header>
+
+          <SummaryCards monthlyBudget={monthlyBudget} totalSpent={totalSpent} />
+
+          <main className="layout-grid">
+            <aside>
+              <ExpenseForm onAddExpense={handleAddExpense} />
+              <CategoryBreakdown expenses={expenses} />
+            </aside>
+
+            <section>
+              <ExpenseList expenses={expenses} onDeleteExpense={handleDeleteExpense} />
+            </section>
+          </main>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
